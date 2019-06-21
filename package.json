@@ -1,0 +1,13 @@
+{
+  "name": "socket-server-mock",
+  "version": "1.0.0",
+  "description": "socket with jwt auth",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.17.1",
+    "johnny-five": "^1.1.0",
+    "jsonwebtoken": "^8.5.1",
+    "socket.io": "^2.2.0"
+  }
+}
