@@ -23,6 +23,44 @@ board.on("ready", () => {
 
   leds[4].on()
 
+
+  io.use(function(socket, next){
+    if (socket.handshake.query && socket.handshake.query.token){
+      jwt.verify(socket.handshake.query.token, 'privatekey', function(err, decoded) {
+        if(err) return next(new Error('Authentication error'));
+        socket.decoded = decoded;
+        next();
+      });
+    } else {
+        next(new Error('Authentication error'));
+    }    
+  })
+  .on('connection', function(socket) {
+      console.log(socket.id);
+      console.log(socket.decoded);
+      // Connection now authenticated to receive further events
+  
+      socket.on('SEND_MESSAGE', function(data){
+        console.log(data);
+        // TU BĘDĄ WSTAWIONE DANE KTO WYWOŁAŁ TĄ AKCJĘ:
+        socket.broadcast.emit ('FromAPI', `wiadomość zwrotna wysłana przez ${socket.id}`);
+    })
+  
+    // odbiera dane od klienta o poruszeniu suwaka
+    socket.on('suwak', function(data){
+      // loguje dane
+      console.log(`Lampke zapalił ${socket.id} i ustawił ${data}`);
+  
+  
+      lightControl(data)
+      
+  
+      // emituje dane do innych klientów oprócz samego wysyłającego 
+      socket.broadcast.emit ('dane_zmiana_suwaka', data);
+    })
+  
+  });
+
  
 
 });
@@ -73,49 +111,7 @@ lightControl = (data) => {
 
 
 
-io.use(function(socket, next){
-  if (socket.handshake.query && socket.handshake.query.token){
-    jwt.verify(socket.handshake.query.token, 'privatekey', function(err, decoded) {
-      if(err) return next(new Error('Authentication error'));
-      socket.decoded = decoded;
-      next();
-    });
-  } else {
-      next(new Error('Authentication error'));
-  }    
-})
-.on('connection', function(socket) {
-    console.log(socket.id);
-    console.log(socket.decoded);
-    // Connection now authenticated to receive further events
 
-    socket.on('SEND_MESSAGE', function(data){
-      console.log(data);
-      // TU BĘDĄ WSTAWIONE DANE KTO WYWOŁAŁ TĄ AKCJĘ:
-      socket.broadcast.emit ('FromAPI', `wiadomość zwrotna wysłana przez ${socket.id}`);
-  })
-
-  // odbiera dane od klienta o poruszeniu suwaka
-  socket.on('suwak', function(data){
-    // loguje dane
-    console.log(`Lampke zapalił ${socket.id} i ustawił ${data}`);
-
-    
-    
-   
-
-    lightControl(data)
-    
-    
-
-    
-
-
-    // emituje dane do innych klientów oprócz samego wysyłającego 
-    socket.broadcast.emit ('dane_zmiana_suwaka', data);
-  })
-
-});
 
 
  
