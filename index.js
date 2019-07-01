@@ -7,71 +7,25 @@ const five = require("johnny-five");
 const axios = require('axios');
 
 const board = new five.Board({port: 'COM10'});
+const switchAPI = 'http://localhost:3000/switches';
 
-const getSwitches = () => {
+var ledy = [];
+
+
+const getStateFromServer = async () => {
   try {
-    return axios.get('http://localhost:3000/switches')
+    const state = await axios.get(switchAPI);   
+    ledy = state.data
+    console.log(ledy)
+
+
   } catch (error) {
-    console.error(error)
+    console.error(error);
   }
 }
 
-const test = async () => {
-  const breeds = getSwitches()
-    .then(response => {
-      if (response.data) {
+getStateFromServer()
 
-        console.log(
-          response.data
-        )
-      }
-    })
-    .catch(error => {
-      console.log(error)
-    })
-}
-
-test()
-
-
-// array of devices last states
-const deviceState = [
-  {
-    description: 'hall',
-    io: 13,
-    value: 0,
-    user: 'system',
-    timestamp: Date.now()
-  },
-  {
-    description: 'main room',
-    io: 11,
-    value: 0,
-    user: 'system',
-    timestamp: Date.now()
-  },
-  {
-    description: 'bedroom',
-    io: 10,
-    value: 0,
-    user: 'system',
-    timestamp: Date.now()
-  },
-  {
-    description: 'bathroom',
-    io: 9,
-    value: 0,
-    user: 'system',
-    timestamp: Date.now()
-  },
-  {
-    description: 'kitchen',
-    io: 8,
-    value: 0,
-    user: 'system',
-    timestamp: Date.now()
-  }
-]
 
 
 /// DEBOUNCE SAVE STATE IN API///
@@ -101,10 +55,44 @@ const save = debounce(saveData, 2000);
 
 board.on("ready", () => {
 
-  // initialize array of leds objects
-  const leds = deviceState
-    .map(led => new five.Led(led.io));
+  
+  
+  
+    const leds = ledy.map(led => new five.Led(led.pin))
+    const values = ledy.map(el => el.value)
+    const names = ledy.map(el => el.name)
 
+
+  /**
+   * Documentation
+   * @param {array} led array of johnny-five Led objects
+   * @param {array} state array of values to set state (0-255, on, off, blink)
+   */
+    const setLedStates = (led, state) => {
+      for (let i = 0; i < led.length; i++) {
+        if (Number.isInteger(state[i])) {
+          led[i].brightness(state[i]);
+        }
+        else
+        {
+          switch (state[i]) {
+            case 'on':
+              led[i].on()
+              break;
+            case 'blink':
+              led[i].blink()
+              break;
+            default:
+              led[i].off()
+          }
+        }
+      }
+    }
+
+setLedStates(leds,values)
+  
+ 
+  
 
     
 
@@ -135,8 +123,7 @@ board.on("ready", () => {
       socket.on('suwak', function(data){
       // loguje dane
       console.log(`Lampke zapalił ${socket.id} i ustawił ${data}`);
-      leds[1].brightness(data);
-      countBreeds();
+
       save();
       // lightControl(data)
       
@@ -144,6 +131,55 @@ board.on("ready", () => {
       // emituje dane do innych klientów oprócz samego wysyłającego 
       socket.broadcast.emit ('dane_zmiana_suwaka', data);
       })
+
+
+
+      socket.on('switch', function(data){
+        let pinName = data[0]
+        let value = parseInt(data[1])
+        let userName = socket.decoded.user.username
+        let userPermission = socket.decoded.user.permission_policy
+        let ledPosition = names.indexOf(pinName)
+
+        checkPermission = (name) => userPermission[name];
+
+        if (checkPermission(pinName)) {
+          console.log(`${Date.now()} Użytkownik ${userName} zmienia stan pinu ${pinName} na: ${value}`)
+
+          leds[ledPosition].brightness(value);
+
+          save();
+
+          // emituje dane do innych klientów oprócz samego wysyłającego 
+          socket.broadcast.emit ('update-switch', data);
+          
+        } else { console.log('Użytkownik nie ma praw do zmiany stanu tego pinu lub pin nie istnieje') }
+
+        })
+
+      // socket.on('slider', function(data){
+      //   // loguje dane
+      //   console.log(`Lampke zapalił ${socket.id} i ustawił ${data}`);
+      //   // if (socket.decoded.permission.reduce(data) == ) {
+          
+      //   // } else {
+          
+      //   // }
+        
+      //   // data.switchName
+      //   // data.value
+
+        
+
+      //   // leds[1].brightness(data);
+   
+      //   // save();
+      //   // // lightControl(data)
+        
+    
+      //   // // emituje dane do innych klientów oprócz samego wysyłającego 
+      //   // socket.broadcast.emit ('dane_zmiana_suwaka', data);
+      //   })
   
   });
 
