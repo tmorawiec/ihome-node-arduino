@@ -6,10 +6,35 @@ const jwt = require('jsonwebtoken');
 const five = require("johnny-five");
 const axios = require('axios');
 
+
+const debounceQueue = require ('debounce-queue');
+
 const board = new five.Board({port: 'COM10'});
 const switchAPI = 'http://localhost:3000/switches';
 
 var ledy = [];
+
+
+onChange = (state) => {
+  
+  const uniqueValues = (arr) => [...new Set(arr)]; // tworzy tablice unikalnch nazw z innej tablicy
+  const lastPosition = (arr, name) => arr.lastIndexOf(name) // podaje numer ostatniego indexu pod którym wystąpił element
+  const lastChanges = lastUniquePinChangesOf(state); // tablica ostatnich unikalnych zmian na pinie
+
+  function lastUniquePinChangesOf(arr) {
+    const onlyNames = arr.map(i=>i[0]) // tworzy tablice samych nazw
+    var newArr = [] // tablica z ostatnimi zdarzeniami na danym pinie
+    for (let i = 0; i < uniqueValues(onlyNames).length; i++) {
+      newArr.push(arr[lastPosition(onlyNames, uniqueValues(onlyNames)[i])])
+    }
+    return newArr
+  }
+ 
+  
+  console.log(lastChanges)
+} 
+const debounced = debounceQueue(onChange, 3000);
+ 
 
 
 const getStateFromServer = async () => {
@@ -30,25 +55,25 @@ getStateFromServer()
 
 /// DEBOUNCE SAVE STATE IN API///
 
-const saveData = () => {
-  // wysyłanie ostatniego stanu arduino do API rails - historia przełączników
-  console.log("Zapisywanie danych ..");
+// const saveData = () => {
+//   // wysyłanie ostatniego stanu arduino do API rails - historia przełączników
+//   console.log("Zapisywanie danych ..");
 
-}
+// }
 
-const debounce = function (fn, d) {
-  let timer;
-  return function () {
-    let context = this,
-      args = arguments;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      saveData.apply(context, arguments);
-    }, d);
-  }
-}
+// const debounce = function (fn, d) {
+//   let timer;
+//   return function () {
+//     let context = this,
+//       args = arguments;
+//     clearTimeout(timer);
+//     timer = setTimeout(() => {
+//       saveData.apply(context, arguments);
+//     }, d);
+//   }
+// }
 
-const save = debounce(saveData, 2000);
+// const save = debounce(saveData, 2000);
 
 /// DEBOUNCE SAVE STATE IN API ///
 
@@ -144,11 +169,12 @@ setLedStates(leds,values)
         checkPermission = (name) => userPermission[name];
 
         if (checkPermission(pinName)) {
-          console.log(`${Date.now()} Użytkownik ${userName} zmienia stan pinu ${pinName} na: ${value}`)
+          console.log(`${Date.now()} Użytkownik ${userName} ${socket.id} zmienia stan pinu ${pinName} na: ${value}`)
 
           leds[ledPosition].brightness(value);
 
-          save();
+          // zapis ostaniej akcji na danym pinie do bazy danych
+          debounced(pinName, userName, value);
 
           // emituje dane do innych klientów oprócz samego wysyłającego 
           socket.broadcast.emit ('update-switch', data);
