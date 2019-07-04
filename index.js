@@ -15,25 +15,51 @@ const switchAPI = 'http://localhost:3000/switches';
 var ledy = [];
 
 
+// BAZUJE NA TABLICY O FORMACIE [nazwa_pinu, ...]
 onChange = (state) => {
-  
   const uniqueValues = (arr) => [...new Set(arr)]; // tworzy tablice unikalnch nazw z innej tablicy
   const lastPosition = (arr, name) => arr.lastIndexOf(name) // podaje numer ostatniego indexu pod którym wystąpił element
+
   const lastChanges = lastUniquePinChangesOf(state); // tablica ostatnich unikalnych zmian na pinie
 
-  function lastUniquePinChangesOf(arr) {
-    const onlyNames = arr.map(i=>i[0]) // tworzy tablice samych nazw
-    var newArr = [] // tablica z ostatnimi zdarzeniami na danym pinie
-    for (let i = 0; i < uniqueValues(onlyNames).length; i++) {
-      newArr.push(arr[lastPosition(onlyNames, uniqueValues(onlyNames)[i])])
+  function lastUniquePinChangesOf(history) {
+    const onlyNames = history.map(i=>i[0]) // tworzy tablice samych nazw
+    const uniqueNames = uniqueValues(onlyNames) // tworzy tablice unikalnych nazw
+    var filtredHistory = [] // tablica z ostatnimi zdarzeniami na danym pinie
+
+    for (let i = 0; i < uniqueNames.length; i++) {
+      filtredHistory.push(history[lastPosition(onlyNames, uniqueNames[i])])
     }
-    return newArr
+    return filtredHistory
   }
- 
-  
   console.log(lastChanges)
 } 
 const debounced = debounceQueue(onChange, 3000);
+
+
+
+
+//BAZUJE NA OBIEKCIE ZMIANY PINU
+filterAndSave = (objects) => {
+  const history = objects.map(i=>i[0]) // wypakowuje obiekty z tablic
+  uniqueValues = (arr) => [...new Set(arr)]; // tworzy tablice unikalnch nazw z innej tablicy
+  getMaxTimeOf = (arr) => Math.max(...arr.map(o => o.timeStamp), 0);
+
+  selectorName = (name) => (obj) => obj.name === name; // zwraca funkcję która nazwe i porównuje z nazwa obiektu zwraca true/false
+  selectorTime = (time) => (obj) => obj.timeStamp === time; // zwraca funkcję która przyjmuje czas i porównuje z czasem obiektu zwraca true/false
+  var getGroup = (obj, selector) => obj.filter(selector)
+
+  const uniqueNames = uniqueValues(history.map(o => o.name))
+
+
+  uniqueNames.forEach(element => {
+    const group = getGroup(history, selectorName(element))
+    var groupLastTime = getMaxTimeOf(group)
+    console.log(getGroup(group, selectorTime(groupLastTime)))
+  });
+
+} 
+const debouncedSaveToDB = debounceQueue(filterAndSave, 3000);
  
 
 
@@ -174,7 +200,15 @@ setLedStates(leds,values)
           leds[ledPosition].brightness(value);
 
           // zapis ostaniej akcji na danym pinie do bazy danych
-          debounced(pinName, userName, value);
+            // jako tablica
+            debounced(pinName, userName, value);
+            // jako obiekt w tablicy
+            debouncedSaveToDB({
+              name: pinName,
+              value: value,
+              user: userName,
+              timeStamp: Date.now()
+            })
 
           // emituje dane do innych klientów oprócz samego wysyłającego 
           socket.broadcast.emit ('update-switch', data);
