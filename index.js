@@ -1,64 +1,34 @@
-// SYMULATOR SERWERA ARDUINO
 const app = require('express')();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const jwt = require('jsonwebtoken');
 const five = require("johnny-five");
 const axios = require('axios');
-
-
 const debounceQueue = require ('debounce-queue');
 
-const board = new five.Board({port: 'COM10'});
-const switchAPI = 'http://localhost:3000/switches';
+const board = new five.Board({port: 'COM4'});
+const switchAPI = 'http://localhost:3000/switches.json';
+const historyAPI = 'http://localhost:3000/histories';
 
 var ledy = [];
 
 
-// BAZUJE NA TABLICY O FORMACIE [nazwa_pinu, ...]
-onChange = (state) => {
-  const uniqueValues = (arr) => [...new Set(arr)]; // tworzy tablice unikalnch nazw z innej tablicy
-  const lastPosition = (arr, name) => arr.lastIndexOf(name) // podaje numer ostatniego indexu pod którym wystąpił element
-
-  const lastChanges = lastUniquePinChangesOf(state); // tablica ostatnich unikalnych zmian na pinie
-
-  function lastUniquePinChangesOf(history) {
-    const onlyNames = history.map(i=>i[0]) // tworzy tablice samych nazw
-    const uniqueNames = uniqueValues(onlyNames) // tworzy tablice unikalnych nazw
-    var filtredHistory = [] // tablica z ostatnimi zdarzeniami na danym pinie
-
-    for (let i = 0; i < uniqueNames.length; i++) {
-      filtredHistory.push(history[lastPosition(onlyNames, uniqueNames[i])])
-    }
-    return filtredHistory
-  }
-  console.log(lastChanges)
-} 
-const debounced = debounceQueue(onChange, 3000);
-
-
-
-
-//BAZUJE NA OBIEKCIE ZMIANY PINU
 filterAndSave = (objects) => {
-  const history = objects.map(i=>i[0]) // wypakowuje obiekty z tablic
-  uniqueValues = (arr) => [...new Set(arr)]; // tworzy tablice unikalnch nazw z innej tablicy
-  getMaxTimeOf = (arr) => Math.max(...arr.map(o => o.timeStamp), 0);
+  // unfiltred data
+  const history = objects.map(i=>i[0])
 
-  selectorName = (name) => (obj) => obj.name === name; // zwraca funkcję która nazwe i porównuje z nazwa obiektu zwraca true/false
-  selectorTime = (time) => (obj) => obj.timeStamp === time; // zwraca funkcję która przyjmuje czas i porównuje z czasem obiektu zwraca true/false
-  var getGroup = (obj, selector) => obj.filter(selector)
+  // filtred by max timeStamp in unique names
+  const lastChanges = Object.values(history.reduce(
+    (r, o) => { 
+      r[o.name] = r[o.name] && r[o.name].timeStamp > o.timeStamp ? r[o.name] : o
+      return r }, {}))
 
-  const uniqueNames = uniqueValues(history.map(o => o.name))
-
-
-  uniqueNames.forEach(element => {
-    const group = getGroup(history, selectorName(element))
-    var groupLastTime = getMaxTimeOf(group)
-    console.log(getGroup(group, selectorTime(groupLastTime)))
-  });
-
+  // save to DB filtred data
+  lastChanges.map(x => postStateToHistory(x));
 } 
+
+
+
 const debouncedSaveToDB = debounceQueue(filterAndSave, 3000);
  
 
@@ -75,8 +45,24 @@ const getStateFromServer = async () => {
   }
 }
 
-getStateFromServer()
+const postStateToHistory = async (obj) => {
 
+  axios.post(historyAPI, {
+    "switch_name": obj.name,
+    "user_name": obj.user,
+    "value": obj.value,
+    "timeStamp": obj.timeStamp,
+  })
+  .then(function (response) {
+    console.log(`Użytkownik ${response.data.user} zapisał w Bazie danych stan switcha: ${response.data.switch}, wartość: ${response.data.value}`);
+  })
+  .catch(function (error) {
+    console.log(error);
+  });
+}
+
+getStateFromServer()
+// postStateToHistory()
 
 
 /// DEBOUNCE SAVE STATE IN API///
@@ -107,10 +93,8 @@ getStateFromServer()
 board.on("ready", () => {
 
   
-  
-  
     const leds = ledy.map(led => new five.Led(led.pin))
-    const values = ledy.map(el => el.value)
+    const values = ledy.map(el => parseInt(el.state.value))
     const names = ledy.map(el => el.name)
 
 
@@ -150,7 +134,7 @@ setLedStates(leds,values)
   // initialize socket.io with JWT
   io.use(function(socket, next){
     if (socket.handshake.query && socket.handshake.query.token){
-      jwt.verify(socket.handshake.query.token, 'privatekey', function(err, decoded) {
+      jwt.verify(socket.handshake.query.token, 'd105bba7e66439af4bdf70653143aca9a69fc87db14c299ffd2457ac2ec52ac64758044a521f45d3eed469dfbdbb1b58f38c2f692bda99cb264acb06b80f0858', function(err, decoded) {
         if(err) return next(new Error('Authentication error'));
         socket.decoded = decoded;
         next();
@@ -199,9 +183,7 @@ setLedStates(leds,values)
 
           leds[ledPosition].brightness(value);
 
-          // zapis ostaniej akcji na danym pinie do bazy danych
-            // jako tablica
-            debounced(pinName, userName, value);
+   
             // jako obiekt w tablicy
             debouncedSaveToDB({
               name: pinName,
