@@ -25,6 +25,8 @@ filterAndSave = (objects) => {
 
   // save to DB filtred data
   lastChanges.map(x => postStateToHistory(x));
+
+  console.log(ledy)
 } 
 
 
@@ -147,25 +149,17 @@ setLedStates(leds,values)
       console.log(socket.id);
       console.log(socket.decoded);
       // Connection now authenticated to receive further events
-  
-      socket.on('SEND_MESSAGE', function(data){
-        console.log(data);
-        // TU BĘDĄ WSTAWIONE DANE KTO WYWOŁAŁ TĄ AKCJĘ:
-        socket.broadcast.emit ('FromAPI', `wiadomość zwrotna wysłana przez ${socket.id}`);
-      })
-  
-      // odbiera dane od klienta o poruszeniu suwaka
-      socket.on('suwak', function(data){
-      // loguje dane
-      console.log(`Lampke zapalił ${socket.id} i ustawił ${data}`);
 
-      save();
-      // lightControl(data)
-      
+      // wysłanie do nowo podłączonego użytkownika tablicy z aktualnym stanem ledów
+      socket.emit('hello', ledy);
   
-      // emituje dane do innych klientów oprócz samego wysyłającego 
-      socket.broadcast.emit ('dane_zmiana_suwaka', data);
-      })
+      // socket.on('SEND_MESSAGE', function(data){
+      //   console.log(data);
+      //   // TU BĘDĄ WSTAWIONE DANE KTO WYWOŁAŁ TĄ AKCJĘ:
+      //   socket.broadcast.emit ('FromAPI', `wiadomość zwrotna wysłana przez ${socket.id}`);
+      // })
+  
+
 
 
 
@@ -183,6 +177,9 @@ setLedStates(leds,values)
 
           leds[ledPosition].brightness(value);
 
+          // ustawienie tablicy led aktulną wartością
+          ledy[ledPosition].state.value = value
+          
    
             // jako obiekt w tablicy
             debouncedSaveToDB({
